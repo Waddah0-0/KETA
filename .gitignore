@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.vscode/
+outputs/
+unsloth_compiled_cache/
+*.egg-info/
+.env
