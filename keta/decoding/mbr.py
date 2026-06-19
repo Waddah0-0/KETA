@@ -8,11 +8,11 @@ from .metrics import DialectScorer
 logger = logging.getLogger(__name__)
 
 
-def chrf_score_simple(hyp: str, ref: str, n: int = 6, beta: float = 2.0) -> float:
-    """Character n-gram F-score. Uses NLTK if available, otherwise a pure-Python fallback."""
+def chrf_score_simple(hyp: str, ref: str, char_n: int = 6, word_n: int = 2, beta: float = 2.0) -> float:
+    """chrF++ score: character n-gram F-score plus word n-grams. Uses NLTK if available."""
     try:
         from nltk.translate.chrf_score import sentence_chrf
-        return sentence_chrf(ref, hyp, min_len=1, max_len=n, beta=beta)
+        return sentence_chrf(ref, hyp, min_len=1, max_len=char_n, beta=beta)
     except ImportError:
         pass
 
@@ -26,22 +26,33 @@ def chrf_score_simple(hyp: str, ref: str, n: int = 6, beta: float = 2.0) -> floa
             grams[g] = grams.get(g, 0) + 1
         return grams
 
-    total_p, total_r, count = 0.0, 0.0, 0
-    for i in range(1, n + 1):
-        h_ng = char_ngrams(hyp, i)
-        r_ng = char_ngrams(ref, i)
-        if not h_ng or not r_ng:
-            continue
-        matches = sum(min(freq, r_ng.get(g, 0)) for g, freq in h_ng.items())
-        total_p += matches / sum(h_ng.values())
-        total_r += matches / sum(r_ng.values())
-        count += 1
+    def word_ngrams(text: str, size: int) -> Dict[str, int]:
+        tokens = text.split()
+        grams = {}
+        for i in range(len(tokens) - size + 1):
+            g = " ".join(tokens[i : i + size])
+            grams[g] = grams.get(g, 0) + 1
+        return grams
 
-    if count == 0:
-        return 0.0
-    p, r = total_p / count, total_r / count
-    denom = beta**2 * p + r
-    return (1 + beta**2) * p * r / denom if denom > 0 else 0.0
+    def _fscore(h_ng: Dict[str, int], r_ng: Dict[str, int]) -> float:
+        if not h_ng or not r_ng:
+            return 0.0
+        matches = sum(min(freq, r_ng.get(g, 0)) for g, freq in h_ng.items())
+        p = matches / sum(h_ng.values()) if h_ng else 0.0
+        r = matches / sum(r_ng.values()) if r_ng else 0.0
+        denom = beta**2 * p + r
+        return (1 + beta**2) * p * r / denom if denom > 0 else 0.0
+
+    # Character n-gram F-scores (chrF)
+    f_scores = []
+    for i in range(1, char_n + 1):
+        f_scores.append(_fscore(char_ngrams(hyp, i), char_ngrams(ref, i)))
+
+    # Word n-gram F-scores (the ++ in chrF++)
+    for i in range(1, word_n + 1):
+        f_scores.append(_fscore(word_ngrams(hyp, i), word_ngrams(ref, i)))
+
+    return sum(f_scores) / len(f_scores) if f_scores else 0.0
 
 
 class DialectAwareMBR:
@@ -92,10 +103,11 @@ class DialectAwareMBR:
         max_new_tokens: int = 128,
         temperature: float = 0.7,
         top_p: float = 0.9,
-        alpha_chrf: float = 0.5,
-        alpha_dialect: float = 0.5,
+        alpha: float = 0.5,
     ) -> Tuple[str, Dict[str, Any]]:
-        """Runs MBR: generate → score pairwise chrF → score dialectness → pick best."""
+        """Runs MBR: generate → score pairwise chrF++ → score dialectness → pick best.
+        Utility is a linear combination: U(y) = α·chrF++(y) + (1-α)·ADI2(y).
+        """
         candidates = self.generate_candidates(prompt, num_candidates, max_new_tokens, temperature, top_p)
 
         if len(candidates) == 1:
@@ -111,11 +123,8 @@ class DialectAwareMBR:
 
         dialect_scores = np.array([self.dialect_scorer.score(c) for c in candidates])
 
-        # Joint utility: geometric-weighted combination
-        joint = np.array([
-            (max(1e-4, semantic_scores[i]) ** alpha_chrf) * (max(1e-4, dialect_scores[i]) ** alpha_dialect)
-            for i in range(N)
-        ])
+        # Joint utility: linear combination as per paper
+        joint = alpha * semantic_scores + (1 - alpha) * dialect_scores
 
         best_idx = int(np.argmax(joint))
         logger.info(f"Best candidate #{best_idx} (utility={joint[best_idx]:.4f})")

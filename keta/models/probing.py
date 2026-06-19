@@ -91,12 +91,13 @@ class LayerWiseProbe:
             clf.fit(X_train, y_train)
 
             macro_f1 = f1_score(y_test, clf.predict(X_test), average="macro")
-            layer_num = layer_idx + 1  # 1-indexed
+            # 0-indexed to match PEFT layers_to_transform convention
+            layer_num = layer_idx  # hidden_states[0] = layer 1 output (we skipped embedding)
             scores[layer_num] = macro_f1
 
             if macro_f1 >= threshold:
                 target_layers.append(layer_num)
-            logger.info(f"Layer {layer_num:2d} F1: {macro_f1:.4f}")
+            logger.info(f"Layer {layer_num:2d} (0-idx) F1: {macro_f1:.4f}")
 
         # Fallback: top 30% if nothing crossed the threshold
         if not target_layers:

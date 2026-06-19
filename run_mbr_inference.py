@@ -19,8 +19,8 @@ def main():
     p.add_argument("--max_new_tokens", type=int, default=64)
     p.add_argument("--temperature", type=float, default=0.7)
     p.add_argument("--top_p", type=float, default=0.9)
-    p.add_argument("--alpha_chrf", type=float, default=0.5)
-    p.add_argument("--alpha_dialect", type=float, default=0.5)
+    p.add_argument("--alpha", type=float, default=0.5,
+                    help="Weight for chrF++ in linear utility: U = α·chrF + (1-α)·ADI2")
 
     args = p.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -75,8 +75,7 @@ def main():
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
         top_p=args.top_p,
-        alpha_chrf=args.alpha_chrf,
-        alpha_dialect=args.alpha_dialect,
+        alpha=args.alpha,
     )
 
     print(f"\n{'='*80}")

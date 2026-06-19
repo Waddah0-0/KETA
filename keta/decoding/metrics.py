@@ -40,37 +40,27 @@ class DialectScorer:
         }
 
     def compute_aldi_score(self, text: str) -> float:
-        """Ratio of Gulf markers to total markers. Returns 0.0–1.0."""
+        """Density of Gulf dialect markers over the total word count. Returns 0.0–1.0."""
         words = text.split()
         if not words:
             return 0.0
 
         gulf_matches = 0
-        msa_matches = 0
 
         for word in words:
             clean = _PUNCT_RE.sub("", word)
             if not clean:
                 continue
 
-            matched_gulf = False
             for pattern in self.gulf_lexicon:
                 if re.search(pattern, clean):
                     gulf_matches += 1
-                    matched_gulf = True
                     break
 
-            if not matched_gulf:
-                for pattern in self.msa_lexicon:
-                    if re.search(pattern, clean):
-                        msa_matches += 1
-                        break
+        if gulf_matches == 0:
+            return 0.0
 
-        total = gulf_matches + msa_matches
-        if total == 0:
-            return 0.2  # neutral baseline
-
-        return float(_clamp(gulf_matches / total, 0.1, 1.0))
+        return float(_clamp(gulf_matches / len(words), 0.0, 1.0))
 
     def compute_nadi_score(self, text: str) -> float:
         """Posterior probability that text is target dialect."""
@@ -91,7 +81,7 @@ class DialectScorer:
         total_words = len(text.split())
         if total_words == 0:
             return 0.0
-        return min(1.0, (gulf_density * 2.5) / total_words)
+        return min(1.0, gulf_density / total_words)
 
     def score(self, text: str) -> float:
         """ADI2 = ALDi(y) * NADI(y)_C"""
