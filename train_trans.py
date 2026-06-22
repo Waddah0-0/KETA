@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import torch
 import logging
@@ -16,8 +17,126 @@ def gpu_stats(tag=""):
         logger.info(f"{tag} VRAM: {alloc:.2f}/{total:.2f} GB")
 
 
+SYSTEM_PROMPT = "أنت موظف خدمة عملاء خليجي ودود ومحترف. تتحدث بلهجة خليجية طبيعية وتساعد العميل بكل احترام."
+
+
+def format_conversation(sample: dict) -> str:
+    """Builds a ChatML string from a multi-turn conversation sample.
+
+    Expected format:
+    {
+        "context": {"intent": "...", "region": "..."},         # optional
+        "conversation_history": [{"role": "...", "content": "..."}, ...],  # optional
+        "next_turn": {
+            "prompt": "...",
+            "chosen": "...",       # the response we train on
+            "rejected": "..."     # ignored in SFT, useful for future DPO
+        }
+    }
+    """
+    ctx = sample.get("context", {})
+    intent = ctx.get("intent", "")
+    region = ctx.get("region", "")
+
+    # Build system prompt with context if available
+    sys_prompt = SYSTEM_PROMPT
+    if intent or region:
+        extras = []
+        if intent:
+            extras.append(f"intent: {intent}")
+        if region:
+            extras.append(f"region: {region}")
+        sys_prompt += "\n[" + ", ".join(extras) + "]"
+
+    parts = [f"<|im_start|>system\n{sys_prompt}<|im_end|>"]
+
+    # Replay conversation history
+    for turn in sample.get("conversation_history", []):
+        role = turn["role"]
+        parts.append(f"<|im_start|>{role}\n{turn['content']}<|im_end|>")
+
+    # Final turn: user prompt + chosen assistant response
+    next_turn = sample.get("next_turn", {})
+    if next_turn.get("prompt"):
+        parts.append(f"<|im_start|>user\n{next_turn['prompt']}<|im_end|>")
+    if next_turn.get("chosen"):
+        parts.append(f"<|im_start|>assistant\n{next_turn['chosen']}<|im_end|>")
+
+    return "\n".join(parts) + "\n"
+
+
+def load_conversations(path: str) -> list:
+    """Loads .json (list) or .jsonl (one-per-line) conversation files."""
+    samples = []
+    if path.endswith(".jsonl"):
+        with open(path, "r", encoding="utf-8") as f:
+            samples = [json.loads(line) for line in f if line.strip()]
+    elif path.endswith(".json"):
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            samples = data if isinstance(data, list) else [data]
+    else:
+        raise ValueError(f"Unsupported format: {path} (use .json or .jsonl)")
+
+    logger.info(f"Loaded {len(samples)} conversations from {path}")
+    return samples
+
+
+# Dummy data for testing without a real dataset
+DUMMY_CONVERSATIONS = [
+    {
+        "context": {"intent": "shipping_complaint", "region": "Saudi_Najdi"},
+        "conversation_history": [
+            {"role": "user", "content": "السلام عليكم، طلبي وش صار فيه؟ صار له ٦ أيام وما وصل"},
+            {"role": "assistant", "content": "وعليكم السلام، حياك الله. عطني رقم الطلب وأشوف لك وينه الحين 🙏"},
+        ],
+        "next_turn": {
+            "prompt": "طيب وش الحل؟ أنا تعبت من الانتظار صراحة",
+            "chosen": "والله معك حق وأعتذر عن التأخير. حجزت لك توصيل سريع بكره الصبح إن شاء الله، ومن طرفنا بنعفيك من رسوم الشحن. أبشر 🙏",
+        },
+    },
+    {
+        "context": {"intent": "refund_request", "region": "Kuwait"},
+        "conversation_history": [
+            {"role": "user", "content": "هلا، أبي أرجع المنتج هذا مو نفس اللي بالصورة"},
+        ],
+        "next_turn": {
+            "prompt": "شلون أرجعه؟",
+            "chosen": "أهلاً فيك! تقدر ترجعه من خلال التطبيق، ادخل على طلباتي واختار إرجاع. أو إذا تبي أرسل لك مندوب يمر عليك، شنو أحسن لك؟",
+        },
+    },
+    {
+        "context": {"intent": "order_status", "region": "UAE"},
+        "conversation_history": [],
+        "next_turn": {
+            "prompt": "مرحبا شحالكم، وين طلبي؟ رقمه ٧٧٨٣",
+            "chosen": "هلا والله! خلني أشيك لك على الطلب الحين. لحظة وحدة طال عمرك ⏳",
+        },
+    },
+    {
+        "context": {"intent": "product_inquiry", "region": "Bahrain"},
+        "conversation_history": [
+            {"role": "user", "content": "عندكم الجهاز هذا بلون ثاني؟"},
+            {"role": "assistant", "content": "هلا فيك! أي جهاز بالضبط تقصد؟"},
+        ],
+        "next_turn": {
+            "prompt": "آيفون ١٦ أبيه بالأزرق",
+            "chosen": "متوفر عندنا بالأزرق والأسود. تبي أحجز لك وحدة؟ التوصيل يوصلك خلال يومين إن شاء الله",
+        },
+    },
+    {
+        "context": {"intent": "greeting", "region": "Qatar"},
+        "conversation_history": [],
+        "next_turn": {
+            "prompt": "السلام عليكم",
+            "chosen": "وعليكم السلام ورحمة الله! حياك الله، شلون أقدر أساعدك اليوم؟ 😊",
+        },
+    },
+] * 10
+
+
 def main():
-    p = argparse.ArgumentParser(description="KETA-Net: Translation grounding adapter (θ_trans)")
+    p = argparse.ArgumentParser(description="KETA-Net: Customer service instruction adapter (θ_trans)")
     p.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-7B")
     p.add_argument("--dataset_path", type=str, default=None)
     p.add_argument("--output_dir", type=str, default="./outputs/theta_trans")
@@ -63,28 +182,17 @@ def main():
 
     # Data
     from datasets import Dataset as HFDataset
-    from keta.utils.data import KETADataset
 
     if args.dataset_path and os.path.exists(args.dataset_path):
-        raw = KETADataset(args.dataset_path)
-        pairs = [(s.get("english", ""), s.get("dialect", "")) for s in raw.samples]
-        pairs = [(e, d) for e, d in pairs if e and d]
+        conversations = load_conversations(args.dataset_path)
     else:
-        logger.warning("No dataset — using dummy EN→GCC pairs")
-        pairs = [
-            ("How are you doing? I hope you are well.", "شلونك طال عمرك؟ عساك طيب وبخير يا رب"),
-            ("Please check if my package has shipped.", "تكفى شف لي شحنتي الحين طلعت ولا لا"),
-            ("I need to return this item and get a refund.", "أبي أرجع الطلب هذا وأسترجع فلوسي وايد تأخرتوا"),
-            ("What happened to my delivery? It has not arrived yet.", "شنو صار على الشحنة؟ للحين ما وصلت عندي هالحزة"),
-            ("We want to order a cake for the birthday party.", "نبي نطلب كيكة حق عيد الميلاد الحين"),
-        ] * 10
+        logger.warning("No dataset — using dummy customer service conversations")
+        conversations = DUMMY_CONVERSATIONS
 
-    formatted = [
-        f"<|im_start|>system\nYou are a helpful bilingual assistant translating English queries into GCC Arabic dialect.<|im_end|>\n"
-        f"<|im_start|>user\nTranslate this message into fluent Gulf Arabic: \"{eng}\"<|im_end|>\n"
-        f"<|im_start|>assistant\n{dia}<|im_end|>\n"
-        for eng, dia in pairs
-    ]
+    formatted = [format_conversation(conv) for conv in conversations]
+    formatted = [f for f in formatted if f.strip()]  # drop empties
+    logger.info(f"Formatted {len(formatted)} training examples")
+
     dataset = HFDataset.from_dict({"text": formatted})
 
     trainer = SFTTrainer(
