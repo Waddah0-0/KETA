@@ -88,14 +88,13 @@ def main():
     fmt = get_formatting_prompts_fn(system_prompt="أنت مساعد ذكي تتحدث بلهجة خليجية عامية وتساعد العميل في طلباته.")
     dataset = HFDataset.from_dict(fmt({"text": samples}))
 
+    tokenizer.model_max_length = args.max_seq_length
+
     trainer = SFTTrainer(
         model=model,
         processing_class=tokenizer,
         train_dataset=dataset,
         args=SFTConfig(
-            dataset_text_field="text",
-            max_seq_length=args.max_seq_length,
-            dataset_num_proc=2,
             packing=False,
             per_device_train_batch_size=args.batch_size,
             gradient_accumulation_steps=args.grad_accum_steps,
