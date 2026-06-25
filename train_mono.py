@@ -2,8 +2,7 @@ import argparse
 import os
 import torch
 import logging
-from transformers import TrainingArguments
-from trl import SFTTrainer
+from trl import SFTTrainer, SFTConfig
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("train_mono")
@@ -93,11 +92,11 @@ def main():
         model=model,
         processing_class=tokenizer,
         train_dataset=dataset,
-        dataset_text_field="text",
-        max_seq_length=args.max_seq_length,
-        dataset_num_proc=2,
-        packing=False,
-        args=TrainingArguments(
+        args=SFTConfig(
+            dataset_text_field="text",
+            max_seq_length=args.max_seq_length,
+            dataset_num_proc=2,
+            packing=False,
             per_device_train_batch_size=args.batch_size,
             gradient_accumulation_steps=args.grad_accum_steps,
             warmup_steps=5,
