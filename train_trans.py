@@ -195,6 +195,8 @@ def main():
     dataset = HFDataset.from_dict({"text": formatted})
 
     tokenizer.model_max_length = args.max_seq_length
+    if tokenizer.eos_token not in tokenizer.get_vocab():
+        tokenizer.eos_token = "<|im_end|>"
 
     trainer = SFTTrainer(
         model=model,
