@@ -195,6 +195,7 @@ def main():
     dataset = HFDataset.from_dict({"text": formatted})
 
     tokenizer.model_max_length = args.max_seq_length
+    tokenizer.add_special_tokens({"eos_token": "<|im_end|>"})
     tokenizer.eos_token = "<|im_end|>"
 
     trainer = SFTTrainer(
@@ -202,6 +203,8 @@ def main():
         processing_class=tokenizer,
         train_dataset=dataset,
         args=SFTConfig(
+            max_seq_length=args.max_seq_length,
+            eos_token="<|im_end|>",
             packing=False,
             per_device_train_batch_size=args.batch_size,
             gradient_accumulation_steps=args.grad_accum_steps,
