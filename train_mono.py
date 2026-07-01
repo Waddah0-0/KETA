@@ -92,28 +92,34 @@ def main():
     tokenizer.add_special_tokens({"eos_token": "<|im_end|>"})
     tokenizer.eos_token = "<|im_end|>"
 
+    sft_config = SFTConfig(
+        packing=False,
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.grad_accum_steps,
+        warmup_steps=5,
+        num_train_epochs=args.epochs,
+        learning_rate=args.lr,
+        fp16=not torch.cuda.is_bf16_supported(),
+        bf16=torch.cuda.is_bf16_supported(),
+        logging_steps=1,
+        optim="paged_adamw_8bit",
+        weight_decay=0.01,
+        lr_scheduler_type="cosine",
+        seed=3407,
+        output_dir=args.output_dir,
+        save_strategy="no",
+        report_to="none",
+    )
+    # Monkeypatch to avoid init TypeError on older TRL 0.24 versions
+    sft_config.max_seq_length = args.max_seq_length
+    sft_config.dataset_text_field = "text"
+    sft_config.eos_token = "<|im_end|>"
+
     trainer = SFTTrainer(
         model=model,
         processing_class=tokenizer,
         train_dataset=dataset,
-        args=SFTConfig(
-            packing=False,
-            per_device_train_batch_size=args.batch_size,
-            gradient_accumulation_steps=args.grad_accum_steps,
-            warmup_steps=5,
-            num_train_epochs=args.epochs,
-            learning_rate=args.lr,
-            fp16=not torch.cuda.is_bf16_supported(),
-            bf16=torch.cuda.is_bf16_supported(),
-            logging_steps=1,
-            optim="paged_adamw_8bit",
-            weight_decay=0.01,
-            lr_scheduler_type="cosine",
-            seed=3407,
-            output_dir=args.output_dir,
-            save_strategy="no",
-            report_to="none",
-        ),
+        args=sft_config,
     )
 
     trainer.train()
