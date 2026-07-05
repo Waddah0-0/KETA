@@ -54,7 +54,7 @@ def main():
         max_seq_length=args.max_seq_length,
         dtype=None,
         load_in_4bit=args.load_in_4bit,
-        device_map="auto",
+        device_map={"": 0},
     )
     gpu_stats("Model loaded")
 
