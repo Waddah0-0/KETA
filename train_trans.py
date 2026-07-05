@@ -1,3 +1,8 @@
+try:
+    import unsloth
+except ImportError:
+    pass
+
 import argparse
 import json
 import os
@@ -195,8 +200,6 @@ def main():
     dataset = HFDataset.from_dict({"text": formatted})
 
     tokenizer.model_max_length = args.max_seq_length
-    tokenizer.add_special_tokens({"eos_token": "<|im_end|>"})
-    tokenizer.eos_token = "<|im_end|>"
 
     sft_config = SFTConfig(
         packing=False,
@@ -219,11 +222,10 @@ def main():
     # Monkeypatch to avoid init TypeError on older TRL 0.24 versions
     sft_config.max_seq_length = args.max_seq_length
     sft_config.dataset_text_field = "text"
-    sft_config.eos_token = "<|im_end|>"
 
     trainer = SFTTrainer(
         model=model,
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
         train_dataset=dataset,
         args=sft_config,
     )
