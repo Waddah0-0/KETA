@@ -91,8 +91,8 @@ def load_conversations(path: str) -> list:
         decoder = json.JSONDecoder()
         idx = 0
         while idx < len(content):
-            # Skip whitespace
-            while idx < len(content) and content[idx].isspace():
+            # Skip whitespace and commas
+            while idx < len(content) and (content[idx].isspace() or content[idx] == ","):
                 idx += 1
             if idx >= len(content):
                 break
