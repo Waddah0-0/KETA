@@ -78,6 +78,10 @@ class DialectAwareMBR:
         inputs = self.tokenizer(prompt, return_tensors="pt").to(device)
         input_len = inputs.input_ids.shape[1]
 
+        eos_token_id = self.tokenizer.eos_token_id
+        im_end_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
+        stop_tokens = [t for t in [eos_token_id, im_end_id] if t is not None]
+
         with torch.no_grad():
             outputs = self.model.generate(
                 **inputs,
@@ -87,6 +91,7 @@ class DialectAwareMBR:
                 top_p=top_p,
                 num_return_sequences=num_candidates,
                 pad_token_id=self.tokenizer.pad_token_id or self.tokenizer.eos_token_id,
+                eos_token_id=stop_tokens,
             )
 
         candidates = list({

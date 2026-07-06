@@ -83,7 +83,7 @@ def main():
     print(f"\n{'='*80}")
     print("KETA-NET MBR DECODING RESULTS")
     print(f"{'='*80}")
-    print(f"English: {args.prompt}")
+    print(f"Input:   {args.prompt}")
     print(f"{'─'*80}")
     print(f"Best:    {best}")
     print(f"{'='*80}")
