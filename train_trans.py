@@ -100,9 +100,11 @@ def load_conversations(path: str) -> list:
             try:
                 obj, next_idx = decoder.raw_decode(content, idx)
                 if isinstance(obj, list):
-                    samples.extend(obj)
-                else:
+                    samples.extend([item for item in obj if isinstance(item, dict)])
+                elif isinstance(obj, dict):
                     samples.append(obj)
+                else:
+                    logger.warning(f"Skipped non-dict JSON object at {idx}")
                 idx = next_idx
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse JSON at character {idx}: {e}")
