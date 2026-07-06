@@ -13,7 +13,7 @@ def main():
     p = argparse.ArgumentParser(description="KETA-Net: Dialect-Aware MBR Inference")
     p.add_argument("--model_name", type=str, default="Qwen/Qwen2.5-7B")
     p.add_argument("--adapter_dir", type=str, default="./outputs/theta_merged")
-    p.add_argument("--prompt", type=str, default="Can you help me cancel my order and get a refund?")
+    p.add_argument("--prompt", type=str, default="السلام عليكم، طلبي تأخر صار له أسبوع ما وصل، وش الحل؟")
 
     p.add_argument("--num_candidates", type=int, default=10)
     p.add_argument("--max_new_tokens", type=int, default=64)
@@ -63,9 +63,11 @@ def main():
     scorer = DialectScorer()
     mbr = DialectAwareMBR(model=model, tokenizer=tokenizer, dialect_scorer=scorer)
 
+    SYSTEM_PROMPT = "أنت موظف خدمة عملاء خليجي ودود ومحترف. تتحدث بلهجة خليجية طبيعية وتساعد العميل بكل احترام."
+    
     formatted_prompt = (
-        f"<|im_start|>system\nYou are a helpful bilingual assistant translating English queries into GCC Arabic dialect.<|im_end|>\n"
-        f"<|im_start|>user\nTranslate this message into fluent Gulf Arabic: \"{args.prompt}\"<|im_end|>\n"
+        f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n"
+        f"<|im_start|>user\n{args.prompt}<|im_end|>\n"
         f"<|im_start|>assistant\n"
     )
 
