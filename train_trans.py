@@ -70,17 +70,51 @@ def format_conversation(sample: dict) -> str:
 
 
 def load_conversations(path: str) -> list:
-    """Loads .json (list) or .jsonl (one-per-line) conversation files."""
+    """Loads .json (list) or .jsonl (one-per-line) conversation files robustly."""
     samples = []
+    logger.info(f"Loading conversations from {path}...")
+    
     if path.endswith(".jsonl"):
         with open(path, "r", encoding="utf-8") as f:
-            samples = [json.loads(line) for line in f if line.strip()]
-    elif path.endswith(".json"):
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            samples = data if isinstance(data, list) else [data]
+            for line_idx, line in enumerate(f):
+                line = line.strip()
+                if not line: continue
+                try:
+                    samples.append(json.loads(line))
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Skipping invalid JSON at line {line_idx+1}: {e}")
     else:
-        raise ValueError(f"Unsupported format: {path} (use .json or .jsonl)")
+        # Robust .json parsing (handles concatenated arrays or multiple root objects)
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+            
+        decoder = json.JSONDecoder()
+        idx = 0
+        while idx < len(content):
+            # Skip whitespace
+            while idx < len(content) and content[idx].isspace():
+                idx += 1
+            if idx >= len(content):
+                break
+                
+            try:
+                obj, next_idx = decoder.raw_decode(content, idx)
+                if isinstance(obj, list):
+                    samples.extend(obj)
+                else:
+                    samples.append(obj)
+                idx = next_idx
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON at character {idx}: {e}")
+                # Try to recover by skipping to the next bracket or brace
+                next_bracket = content.find("[", idx + 1)
+                next_brace = content.find("{", idx + 1)
+                
+                valid_nexts = [n for n in (next_bracket, next_brace) if n != -1]
+                if not valid_nexts:
+                    break
+                idx = min(valid_nexts)
+                logger.warning(f"Attempting to recover by jumping to character {idx}")
 
     logger.info(f"Loaded {len(samples)} conversations from {path}")
     return samples
