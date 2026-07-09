@@ -65,11 +65,11 @@ def main():
 
     SYSTEM_PROMPT = "أنت موظف خدمة عملاء خليجي ودود ومحترف. تتحدث بلهجة خليجية طبيعية وتساعد العميل بكل احترام."
     
-    formatted_prompt = (
-        f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n"
-        f"<|im_start|>user\n{args.prompt}<|im_end|>\n"
-        f"<|im_start|>assistant\n"
-    )
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": args.prompt}
+    ]
+    formatted_prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     best, info = mbr.decode(
         prompt=formatted_prompt,

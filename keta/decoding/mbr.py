@@ -80,7 +80,8 @@ class DialectAwareMBR:
 
         eos_token_id = self.tokenizer.eos_token_id
         im_end_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
-        stop_tokens = [t for t in [eos_token_id, im_end_id] if t is not None]
+        eot_id = self.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        stop_tokens = [t for t in [eos_token_id, im_end_id, eot_id] if t is not None]
 
         with torch.no_grad():
             outputs = self.model.generate(
