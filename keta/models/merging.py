@@ -14,12 +14,23 @@ def ties_merge_state_dicts(
     if not state_dicts:
         raise ValueError("state_dicts list is empty")
 
-    keys = list(state_dicts[0].keys())
+    # Gather union of all keys across all state dicts
+    all_keys = set()
+    for sd in state_dicts:
+        all_keys.update(sd.keys())
+        
     merged = {}
     logger.info(f"TIES-Merging {len(state_dicts)} adapters (density={density}, λ={scaling_coefficient})")
 
-    for key in keys:
-        tensors = [sd[key] for sd in state_dicts]
+    for key in all_keys:
+        # Find which state dicts actually contain this key
+        valid_sds = [sd for sd in state_dicts if key in sd]
+        tensors = [sd[key] for sd in valid_sds]
+
+        # If only one adapter touched this layer, just copy it directly (disjoint merge)
+        if len(tensors) == 1:
+            merged[key] = tensors[0].clone()
+            continue
 
         if not tensors[0].is_floating_point():
             merged[key] = tensors[0].clone()
